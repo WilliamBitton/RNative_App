@@ -207,7 +207,7 @@ function LightBox(props: Props): React.JSX.Element {
                 })}
                 keyExtractor={(item, itemIndex) => itemIndex.toString()}
                 initialScrollIndex={index}
-                scrollEnabled={scrollEnabled}
+                scrollEnabled={scrollEnabled.value}
                 onScroll={event => {
                   currentIndex.value = Math.floor(event.nativeEvent.contentOffset.x / screenWidth)
                 }}
