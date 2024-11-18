@@ -1,11 +1,9 @@
 import { Image, makeStyles } from '@rneui/themed'
 import { useCallback, useEffect } from 'react'
-import { Dimensions, View } from 'react-native'
+import { Dimensions, NativeScrollEvent, NativeSyntheticEvent, View } from 'react-native'
 import { Gesture, GestureDetector } from 'react-native-gesture-handler'
 import Animated, {
-  SharedValue,
   clamp,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming
@@ -16,12 +14,6 @@ const { width: screenWidth, height: screenHeight } = Dimensions.get('window')
 type Data = {
   source: string
   index: number
-}
-
-type NativeEvent = {
-  uri: string
-  width: number
-  height: number
 }
 
 type Props = {
@@ -50,37 +42,33 @@ function LightBox(props: Props): React.JSX.Element {
   const imageHeight = useSharedValue(0)
   const translationY = useSharedValue(0)
   const translationX = useSharedValue(0)
-  const currentIndex = useSharedValue(index)
   const prevTranslationY = useSharedValue(0)
   const prevTranslationX = useSharedValue(0)
   const scrollEnabled = useSharedValue(true)
-  const nativeEventSources: SharedValue<NativeEvent[]> = useSharedValue<NativeEvent[]>([])
   const animatedImageStyles = useAnimatedStyle(() => ({
     transform: [{ translateX: translationX.value }, { translateY: translationY.value }, { scale: scale.value }]
   }))
 
-  const handleImageLoad = ({ nativeEvent }: any) => {
-    if (data[currentIndex.value].source === nativeEvent.source.uri) {
-      const { width, height } = nativeEvent.source
-      imageHeight.value = height
-      imageWidth.value = width
+  const onMomentumScrollEnd = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const index = Math.floor(event.nativeEvent.contentOffset.x / screenWidth)
+      loadImageDimensions(index)
     }
-    nativeEventSources.value = [...nativeEventSources.value, nativeEvent.source]
-  }
 
-  const loadImageDimensions = () => {
-    nativeEventSources.value.map((object: NativeEvent) => {
-      if (data[currentIndex.value].source === object.uri) {
-        const { width, height } = object
-        imageHeight.value = height
-        imageWidth.value = width
-      }
-    })
+  const loadImageDimensions = (index: number) => {
+    const currentImageUri = data?.[index]?.source
+    if (currentImageUri) {
+      Image.getSize(currentImageUri, (width, height) => {
+        const scaleFactor = Math.min(screenWidth / width, screenHeight / height)
+        imageWidth.value = width * scaleFactor
+        imageHeight.value = height * scaleFactor
+      })
+    }
   }
 
   const open = useCallback(() => {
+    loadImageDimensions(index)
     scale.value = withTiming(1)
-  }, [scale])
+  }, [index, scale])
   const close = useCallback(() => {
     onClose()
   }, [onClose])
@@ -128,9 +116,7 @@ function LightBox(props: Props): React.JSX.Element {
         (translationY.value > screenHeight * 0.2 && scale.value === 1) ||
         (translationY.value < -(screenHeight * 0.2) && scale.value === 1)
       ) {
-        scale.value = withTiming(0, {}, () => {
-          runOnJS(close)()
-        })
+        close()
       }
       if (scale.value > 1 && translationX.value > screenEdgeX) {
         translationX.value = withTiming(screenEdgeX)
@@ -179,46 +165,42 @@ function LightBox(props: Props): React.JSX.Element {
     })
     .runOnJS(true)
 
-  const renderItem = ({ item }: { item: Data }) => (
-    <Image
-      source={{ uri: item.source }}
-      style={{ width: screenWidth, height: screenHeight }}
-      resizeMode="contain"
-      onLoad={handleImageLoad}
-    />
-  )
+  const combinedGesture = Gesture.Simultaneous(tap, pan, pinch)
+
+  const renderItem = useCallback(
+    ({ item }: { item: Data }) => (
+      <Image
+        source={{ uri: item.source }}
+        style={{ width: screenWidth, height: screenHeight }}
+        resizeMode="contain"
+      />
+  ), [])
+
 
   return (
     <>
-      <View style={styles.overlay}>
-        <GestureDetector gesture={tap}>
-          <GestureDetector gesture={pan}>
-            <GestureDetector gesture={pinch}>
-              <Animated.FlatList
-                windowSize={1}
-                style={animatedImageStyles}
-                horizontal
-                data={data}
-                renderItem={renderItem}
-                getItemLayout={(Itemdata, itemIndex) => ({
-                  length: screenWidth,
-                  offset: screenWidth * itemIndex,
-                  index
-                })}
-                keyExtractor={(item, itemIndex) => itemIndex.toString()}
-                initialScrollIndex={index}
-                scrollEnabled={scrollEnabled.value}
-                onScroll={event => {
-                  currentIndex.value = Math.floor(event.nativeEvent.contentOffset.x / screenWidth)
-                }}
-                onMomentumScrollEnd={loadImageDimensions}
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-              />
-            </GestureDetector>
-          </GestureDetector>
-        </GestureDetector>
-      </View>
+      <GestureDetector gesture={combinedGesture}>
+        <View style={styles.overlay}>
+          <Animated.FlatList
+            windowSize={1}
+            style={animatedImageStyles}
+            horizontal
+            data={data}
+            renderItem={renderItem}
+            getItemLayout={(Itemdata, itemIndex) => ({
+              length: screenWidth,
+              offset: screenWidth * itemIndex,
+              index
+            })}
+            keyExtractor={(item, itemIndex) => itemIndex.toString()}
+            initialScrollIndex={index}
+            scrollEnabled={scrollEnabled}
+            onMomentumScrollEnd={event => {onMomentumScrollEnd(event)}}
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+          />
+        </View>
+      </GestureDetector>
     </>
   )
 }

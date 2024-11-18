@@ -1,5 +1,5 @@
 import { Image } from '@rneui/themed'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { FlatList } from 'react-native'
 
 import { useLightBoxContext } from '../contexts/lightBoxContext'
@@ -23,20 +23,21 @@ function LightBoxContainer(props: Props) {
   const [containerWidth, setContainerWidth] = useState(0)
   const imageWidth = (containerWidth - col * 4) / col
 
-  const onLayout = (event: { nativeEvent: { layout: { width: any } } }) => {
+  const onLayout = useCallback((event: { nativeEvent: { layout: { width: any } } }) => {
     const { width } = event.nativeEvent.layout
     setContainerWidth(width)
-  }
+  }, [])
 
-  const renderItem = ({ item }: { item: Data }) => (
-    <Image
-      source={{ uri: item.thumbnail ? item.thumbnail : item.source }}
-      style={{ width: imageWidth, height: imageWidth, margin: 2 }}
-      resizeMode="center"
-      onPress={() => {
-        openLightBox(data, item.index)
-      }}
-    />
+  const renderItem = useCallback(
+    ({ item }: { item: Data }) => (
+      <Image
+        source={{ uri: item.thumbnail || item.source }}
+        style={{ width: imageWidth, height: imageWidth, margin: 2 }}
+        resizeMode="center"
+        onPress={() => openLightBox(data, item.index)}
+      />
+    ),
+    [data, imageWidth, openLightBox]
   )
 
   return (
